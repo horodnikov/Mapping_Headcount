@@ -1,7 +1,6 @@
 import pandas as pd
 import sqlalchemy
-from config import host, user, password, db_name
-from config_local import loc_host, loc_user, loc_password, loc_db_name
+from config_s import host, user, password, db_name
 
 
 def to_dict(dataframe):
@@ -129,7 +128,7 @@ if __name__ == '__main__':
 
                     CASE
                         WHEN attrition.start_activity_date = attrition.exit_activity_date THEN ADDDATE(attrition.exit_activity_date, INTERVAL 1 DAY)
-                        WHEN attrition.exit_activity_date IS NOT NULL AND attrition.exit_invoice_through IS NOT NULL THEN attrition.exit_invoice_through
+                        WHEN attrition.exit_invoice_through IS NOT NULL THEN attrition.exit_invoice_through
                         WHEN attrition.exit_activity_date IS NOT NULL AND attrition.exit_invoice_through IS NULL THEN attrition.exit_activity_date
                         WHEN attrition.exit_activity_date IS NULL AND attrition.exit_invoice_through IS NULL
                         THEN ADDDATE(CURDATE(), INTERVAL 1 MONTH)
@@ -155,26 +154,12 @@ if __name__ == '__main__':
             array = write_data(positions_data)
             df = pd.DataFrame(array)
 
-            eng = sqlalchemy.create_engine(
-                "mysql+pymysql://{user}:{pw}@{host}/{db}".format(host=loc_host, db=loc_db_name,
-                                                                 user=loc_user, pw=loc_password))
-            df.to_sql('headcount', eng, index=False, if_exists='replace')
-            eng.dispose()
+            df.to_sql('headcount', engine, index=False, if_exists='replace')
+            print("Done")
         finally:
             connection.close()
             engine.dispose()
 
     except Exception as ex:
         print("Connection to DWH refused...")
-        print(f"'Exception': {ex}")
-
-    try:
-        eng = sqlalchemy.create_engine("mysql+pymysql://{user}:{pw}@{host}/{db}".format(host=loc_host, db=loc_db_name,
-                                                                                        user=loc_user, pw=loc_password))
-        df.to_sql('headcount', eng, index=False, if_exists='replace')
-        print("successfully connection to write...")
-        eng.dispose()
-
-    except Exception as ex:
-        print("Connection to local database refused...")
         print(f"'Exception': {ex}")
