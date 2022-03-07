@@ -1,0 +1,6 @@
+/venv/
+/.idea/
+/config_bi.py
+/config_dwh_dev.py
+/config_workbench.py
+/config_dwh.py

@@ -1,7 +1,7 @@
 import pandas as pd
 import sqlalchemy
-from config_dwh import host, user, password, db_name
-from config_dwh_dev import dev_host, dev_user, dev_password, dev_db_name
+from config_dwh_dev import dev_host as host, dev_user as user, dev_password as password, dev_db_name as db_name
+from config_workbench import loc_host, loc_user, loc_password, loc_db_name
 
 
 def to_dict(dataframe):
@@ -49,7 +49,8 @@ def merge(sorted_array, position_array):
     position_len = len(position_array[0])
 
     name_list = ['billing_model_name', 'revenue_center_name', 'division_name', 'customer_name', 'project_name',
-                 'unit_name', 'job_title', 'location_name']
+                 'unit_name',
+                 'job_title', 'location_name']
 
     organisation_data = ['division', 'department', 'sub_department']
 
@@ -97,12 +98,12 @@ if __name__ == '__main__':
 
     df = {}
     try:
-        dev_connectionString = "mysql+pymysql://" + dev_user + ":" + dev_password + "@" + dev_host + "/" + dev_db_name
-        dev_connect_args = {"ssl": {'ca': r"C:\Users\igh\Downloads\BaltimoreCyberTrustRoot.crt.pem"}}
+        connectionString = "mysql+pymysql://" + user + ":" + password + "@" + host + "/" + db_name
+        connect_args = {"ssl": {'ca': r"C:\Users\igh\Downloads\BaltimoreCyberTrustRoot.crt.pem"}}
 
-        dev_engine = sqlalchemy.create_engine(dev_connectionString, connect_args=dev_connect_args)
-        dev_connection = dev_engine.connect()
-        print("successfully connection to DWH-DEV...")
+        engine = sqlalchemy.create_engine(connectionString, connect_args=connect_args)
+        connection = engine.connect()
+        print("successfully connection to DWH...")
 
         try:
             mapping_query = f"SELECT h.billing_model_name, h.revenue_center_name, h.division_name, h.customer_name, " \
@@ -110,7 +111,7 @@ if __name__ == '__main__':
                             "h.end_date, h.division, h.department, h.sub_department " \
                             "FROM headcount_mapping_structure as h where h.employee_name IS NULL"
 
-            mapping_dataFrame = pd.read_sql(mapping_query, dev_connection)
+            mapping_dataFrame = pd.read_sql(mapping_query, connection)
             mapping_data = to_dict(mapping_dataFrame)
             sorted_data = structure_sort(mapping_data)
 
@@ -125,28 +126,22 @@ if __name__ == '__main__':
                     positions.location_name,
                     concat(employees.last_name,' ',employees.first_name) AS employee_name,
                     attrition.start_activity_date,
-
                     CASE
-                        WHEN attrition.exit_invoice_through IS NOT NULL THEN attrition.exit_invoice_through
                         WHEN attrition.start_activity_date = attrition.exit_activity_date THEN ADDDATE(attrition.exit_activity_date, INTERVAL 1 DAY)
+                        WHEN attrition.exit_activity_date IS NOT NULL AND attrition.exit_invoice_through IS NOT NULL THEN attrition.exit_invoice_through
                         WHEN attrition.exit_activity_date IS NOT NULL AND attrition.exit_invoice_through IS NULL THEN attrition.exit_activity_date
                         WHEN attrition.exit_activity_date IS NULL AND attrition.exit_invoice_through IS NULL
                         THEN ADDDATE(CURDATE(), INTERVAL 1 MONTH)
                     END AS exit_date_with_invoice,
-
                     attrition.employee_guid
-
                     FROM fulfillment_attrition AS attrition
-
                     LEFT JOIN fulfillment_positions positions
                         ON attrition.position_guid = positions.guid
-
                     LEFT JOIN common_employees AS employees
                         ON attrition.employee_guid = employees.guid ) AS headcount
-
                     WHERE ADDDATE(ADDDATE(CURDATE(), INTERVAL -4 YEAR), INTERVAL -1 MONTH)
                         <= Headcount.exit_date_with_invoice"""
-            positions_dataFrame = pd.read_sql(positions_query, dev_connection)
+            positions_dataFrame = pd.read_sql(positions_query, connection)
             positions_data = to_dict(positions_dataFrame)
 
             positions_data = merge(sorted_data, positions_data)
@@ -154,26 +149,21 @@ if __name__ == '__main__':
             array = write_data(positions_data)
             df = pd.DataFrame(array)
 
-            df.to_sql('headcount', dev_engine, index=False, if_exists='replace')
-            print(f"Create new table Headcount on DWH-DEV\n")
-
         finally:
-            dev_connection.close()
-            dev_engine.dispose()
+            connection.close()
+            engine.dispose()
 
     except Exception as ex:
-        print("Connection to DWH-DEV refused...")
+        print("Connection to DWH refused...")
         print(f"'Exception': {ex}")
 
     try:
-        connectionString = "mysql+pymysql://" + user + ":" + password + "@" + host + "/" + db_name
-        connect_args = {"ssl": {'ca': r"C:\Users\igh\Downloads\BaltimoreCyberTrustRoot.crt.pem"}}
-        dev_engine = sqlalchemy.create_engine(connectionString, connect_args=connect_args)
-        dev_connection = dev_engine.connect()
-        print("successfully connection to DWH-PROD...")
-        df.to_sql('headcount', dev_engine, index=False, if_exists='replace')
-        print("Create new table Headcount on DWH-PROD")
+        eng = sqlalchemy.create_engine("mysql+pymysql://{user}:{pw}@{host}/{db}".format(host=loc_host, db=loc_db_name,
+                                                                                        user=loc_user, pw=loc_password))
+        df.to_sql('headcount', eng, index=False, if_exists='replace')
+        print("successfully connection to write...")
+        eng.dispose()
 
     except Exception as ex:
-        print("Connection to DWH-PROD refused...")
+        print("Connection to local database refused...")
         print(f"'Exception': {ex}")
